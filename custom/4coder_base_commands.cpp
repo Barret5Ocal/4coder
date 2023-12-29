@@ -357,6 +357,18 @@ CUSTOM_DOC("Moves the cursor down ten lines.")
     move_vertical_lines(app, 10);
 }
 
+CUSTOM_COMMAND_SIG(move_up_5)
+CUSTOM_DOC("Moves the cursor up ten lines.")
+{
+    move_vertical_lines(app, -5);
+}
+
+CUSTOM_COMMAND_SIG(move_down_5)
+CUSTOM_DOC("Moves the cursor down ten lines.")
+{
+    move_vertical_lines(app, 5);
+}
+
 CUSTOM_COMMAND_SIG(move_down_textual)
 CUSTOM_DOC("Moves down to the next line of actual text, regardless of line wrapping.")
 {

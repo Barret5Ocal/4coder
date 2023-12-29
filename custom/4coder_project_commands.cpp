@@ -375,6 +375,43 @@ prj_file_is_setup(Application_Links *app, String8 script_path, String8 script_fi
     return(result);
 }
 
+function b32 
+prj_generate_odin_bat(Arena *scratch, String8 opts, String8 compiler, String8 script_path, String8 script_file,
+                      String8 code_file, String8 output_dir, String8 binary_file)
+{
+    //b32 success = false;
+    b32 success = false;
+    
+    Temp_Memory temp = begin_temp(scratch);
+    
+    String8 cf = push_string_copy(scratch, code_file);
+    String8 od = push_string_copy(scratch, output_dir);
+    String8 bf = push_string_copy(scratch, binary_file);
+    
+    cf = string_mod_replace_character(cf, '/', '\\');
+    od = string_mod_replace_character(od, '/', '\\');
+    bf = string_mod_replace_character(bf, '/', '\\');
+    
+    String8 file_name = push_u8_stringf(scratch, "%.*s/%.*s.bat",
+                                        string_expand(script_path),
+                                        string_expand(script_file));
+    FILE *bat_script = fopen((char*)file_name.str, "wb");
+    if (bat_script != 0){
+        
+        fprintf(bat_script, "@echo off\n\n");
+        fprintf(bat_script, "set opts=%.*s\n", (i32)opts.size, opts.str);
+        fprintf(bat_script, "set code=%%cd%%\n");
+        fprintf(bat_script, "pushd %.*s\n", (i32)od.size, od.str);
+        fprintf(bat_script, "%.*s %%code%% %%opts%%\n", (i32)compiler.size, compiler.str);
+        fprintf(bat_script, "popd\n");
+        fclose(bat_script);
+        return true;
+    }
+    end_temp(temp);
+    return(success);
+    
+}
+
 function b32
 prj_generate_bat(Arena *scratch, String8 opts, String8 compiler, String8 script_path, String8 script_file,
                  String8 code_file, String8 output_dir, String8 binary_file){
@@ -400,8 +437,7 @@ prj_generate_bat(Arena *scratch, String8 opts, String8 compiler, String8 script_
         fprintf(bat_script, "set opts=%.*s\n", (i32)opts.size, opts.str);
         fprintf(bat_script, "set code=%%cd%%\n");
         fprintf(bat_script, "pushd %.*s\n", (i32)od.size, od.str);
-        fprintf(bat_script, "%.*s %%opts%% %%code%%\\%.*s -Fe%.*s\n",
-                (i32)compiler.size, compiler.str, (i32)cf.size, cf.str, (i32)bf.size, bf.str);
+        fprintf(bat_script, "%.*s %%opts%% %%code%%\\%.*s \n", (i32)compiler.size, compiler.str, (i32)cf.size, cf.str);
         fprintf(bat_script, "popd\n");
         fclose(bat_script);
         success = true;
@@ -498,8 +534,8 @@ prj_generate_project(Arena *scratch, String8 script_path, String8 script_file, S
         fprintf(out, "};\n");
         
         fprintf(out, "fkey_command = {\n");
-        fprintf(out, ".F1 = \"run\";\n");
-        fprintf(out, ".F2 = \"run\";\n");
+        fprintf(out, ".F1 = \"build\",\n");
+        fprintf(out, ".F2 = \"run\",\n");
         fprintf(out, "};\n");
         
         fclose(out);
@@ -618,12 +654,32 @@ prj_setup_scripts(Application_Links *app, Prj_Setup_Script_Flags flags){
         // Generate Scripts
         if (do_bat_script){
             if (!status.bat_exists){
-                String8 default_flags_bat = def_get_config_string(scratch, vars_save_string_lit("default_flags_bat"));
-                String8 default_compiler_bat = def_get_config_string(scratch, vars_save_string_lit("default_compiler_bat"));
+                // TODO(Barret5Ocal): figure out if the script is an .odin then make a odin build file
+                String8 Extension = string_file_extension(code_file);
+                String8 OdinExtension = string_u8_litexpr("odin");
                 
-                if (!prj_generate_bat(scratch, default_flags_bat, default_compiler_bat, script_path,
-                                      script_file, code_file, output_dir, binary_file)){
-                    print_message(app, string_u8_litexpr("could not create build.bat for new project\n"));
+                if (string_match(Extension, OdinExtension))
+                {
+                    
+                    String8 odin_flags_bat = def_get_config_string(scratch, vars_save_string_lit("odin_flags_bat"));
+                    
+                    //print_message(app, string_u8_litexpr(odin_flags_bat.str));
+                    String8 odin_compiler_bat = def_get_config_string(scratch, vars_save_string_lit("odin_compiler_bat"));
+                    
+                    if (!prj_generate_odin_bat(scratch, odin_flags_bat, odin_compiler_bat, script_path,
+                                               script_file, code_file, output_dir, binary_file)){
+                        print_message(app, string_u8_litexpr("could not create build.bat for new project\n"));
+                    }
+                    
+                }
+                else {
+                    String8 default_flags_bat = def_get_config_string(scratch, vars_save_string_lit("default_flags_bat"));
+                    String8 default_compiler_bat = def_get_config_string(scratch, vars_save_string_lit("default_compiler_bat"));
+                    
+                    if (!prj_generate_bat(scratch, default_flags_bat, default_compiler_bat, script_path,
+                                          script_file, code_file, output_dir, binary_file)){
+                        print_message(app, string_u8_litexpr("could not create build.bat for new project\n"));
+                    }
                 }
             }
             else{
