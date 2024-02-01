@@ -47,6 +47,7 @@ enum{
     CodeIndexNote_Function,
     CodeIndexNote_Macro,
     CodeIndexNote_4coderCommand,
+    CodeIndexNote_Constant, // NOTE(Skytrias): NEW
 };
 
 struct Code_Index_Note{
@@ -72,7 +73,7 @@ struct Code_Index_Note_Ptr_Array{
     i32 count;
 };
 
-struct Code_Index_File{
+struct Code_Index_File {
     Code_Index_Nest_List nest_list;
     Code_Index_Nest_Ptr_Array nest_array;
     Code_Index_Note_List note_list;
