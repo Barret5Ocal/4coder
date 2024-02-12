@@ -691,204 +691,25 @@ CUSTOM_DOC("Word complete with drop down menu.")
 }
 
 // Custom stuff
-
-#define GET_VIEW_AND_BUFFER \
-View_ID   view = get_active_view(app, Access_ReadVisible); \
-Buffer_ID buffer = view_get_buffer(app, view, Access_ReadVisible)
-
-u8 kv_get_current_char(Application_Links *app)
+CUSTOM_COMMAND_SIG(b50_rg)
+CUSTOM_DOC("Atempt to make rip grep work")
 {
-    GET_VIEW_AND_BUFFER;
-    i64 pos = view_get_cursor_pos(app, view);
-    return buffer_get_char(app, buffer, pos);
-}
-
-
-function String_Const_u8_Array
-kv_string_split_wildcards(Arena *arena, String_Const_u8 string)
-{
-    String_Const_u8_Array array = {};
-    List_String_Const_u8 list = string_split(arena, string, (u8*)"* ", 2);
-    array.count   = list.node_count;
-    array.strings = push_array(arena, String_Const_u8, array.count);
-    i64 index = 0;
-    for (Node_String_Const_u8 *node = list.first;
-         node;
-         node = node->next)
-    {
-        //kv_assert(index < array.count);
-        array.strings[index++] = node->string;
-    }
-    return(array);
-}
-
-function i64
-kv_fuzzy_search_forward(Application_Links *app, Buffer_ID buffer, i64 pos, String_Const_u8 needle)
-{
-    i64 buffer_size = buffer_get_size(app, buffer);
-    i64 result = buffer_size;
+    // TODO(Barret5Ocal): Let's start by creating a new view and displaying it
     
     Scratch_Block temp(app);
-    String_Const_u8_Array splits = kv_string_split_wildcards(temp, needle);
-    if ( !splits.count ) { return result; }
-    
-    while( pos < buffer_size )
-    {
-        //i64 original_pos = pos;
-        String_Match first_match = buffer_seek_string(app, buffer, splits.strings[0], Scan_Forward, pos);
-        if ( !first_match.buffer ) break;
-        
-        i64 match_start = first_match.range.min;
-        i64 line_end    = get_line_end_pos_from_pos(app, buffer, match_start);
-        pos = first_match.range.end - 1;
-        b32 matched = true;
-        for (i64 index = 1;
-             index < splits.count;
-             index++)
-        {
-            String_Const_u8 substring = splits.strings[index];
-            String_Match match = buffer_seek_string(app, buffer, substring, Scan_Forward, pos);
-            if ( match.buffer )
-            {
-                if ( match.range.max <= line_end )
-                {
-                    pos = match.range.end - 1;
-                }
-                else
-                {
-                    pos = get_line_start_pos_from_pos(app, buffer, match.range.start) - 1;
-                    matched = false;
-                    break;
-                }
-            }
-            else
-            {
-                return result;
-            }
-        }
-        if ( matched )
-        {
-            result = match_start;
-            break;
-        }
-        
-        //kv_assert_defend(pos > original_pos, return buffer_size;);
-    }
-    
-    return result;
-}
-
-function i64
-kv_fuzzy_search_backward(Application_Links *app, Buffer_ID buffer, i64 pos, String_Const_u8 needle)
-{
-    //i64 buffer_size = buffer_get_size(app, buffer);
-    i64 result = -1;
-    
-    Scratch_Block temp(app);
-    String_Const_u8_Array splits = kv_string_split_wildcards(temp, needle);
-    if ( !splits.count ) { return result; }
-    
-    while( pos > -1 )
-    {
-        //i64 original_pos = pos;
-        String_Match first_match = buffer_seek_string(app, buffer, splits.strings[splits.count-1], Scan_Backward, pos);
-        if( !first_match.buffer ) break;
-        
-        i64 match_start = first_match.range.max;
-        i64 line_start   = get_line_start_pos_from_pos(app, buffer, match_start);
-        pos = first_match.range.start;
-        b32 matched = true;
-        for (i64 index = splits.count-2;
-             index >= 0;
-             index--)
-        {
-            String_Const_u8 substring = splits.strings[index];
-            String_Match match = buffer_seek_string(app, buffer, substring, Scan_Backward, pos);
-            if ( match.buffer)
-            {
-                if ( match.range.min >= line_start )
-                {
-                    pos = match.range.start;
-                }
-                else
-                {
-                    pos = get_line_end_pos_from_pos(app, buffer, match.range.start);
-                    matched = false;
-                    break;
-                }
-            }
-            else
-            {
-                return result;
-            }
-        }
-        if ( matched )
-        {
-            result = pos;
-            break;
-        }
-        
-        //kv_assert_defend(pos < original_pos, return result;);
-    }
-    
-    return result;
-}
-
-function void
-kv_list_all_locations_from_string(Application_Links *app, String_Const_u8 needle_str)
-{
-    Scratch_Block temp(app);
-    
     View_ID default_target_view = get_next_view_after_active(app, Access_Always);
-    Buffer_ID search_buffer = create_or_switch_to_buffer_and_clear_by_name(app, search_name, default_target_view);
+    Buffer_ID buffer = create_or_switch_to_buffer_and_clear_by_name(app, search_name, default_target_view);
     
-    String_Match_List all_matches = {};
-    for (Buffer_ID buffer = get_buffer_next(app, 0, Access_Always);
-         buffer != 0;
-         buffer = get_buffer_next(app, buffer, Access_Always))
-    {
-        String_Match_List buffer_matches = {};
-        Range_i64 range = buffer_range(app, buffer);
-        {
-            for (i64 pos = 0; 
-                 pos < range.end;)
-            {
-                //i64 original_pos = pos;
-                pos = kv_fuzzy_search_forward(app, buffer, pos, needle_str);
-                if (pos < range.end)
-                {
-                    // note(kv): just a dummy range, not sure if it's even used
-                    range = {pos, pos+1};
-                    string_match_list_push(temp, &buffer_matches, buffer, 0, 0, range);
-                }
-                //kv_assert_defend(pos > original_pos, break;);
-            }
-        }
-        all_matches = string_match_list_join(&all_matches, &buffer_matches);
-    }
+    Buffer_Insertion out = begin_buffer_insertion_at_buffered(app, buffer, 0, temp, KB(64));
+    buffer_set_setting(app, buffer, BufferSetting_ReadOnly, true);
+    buffer_set_setting(app, buffer, BufferSetting_RecordsHistory, false);
     
-    string_match_list_filter_remove_buffer(&all_matches, search_buffer);
-    string_match_list_filter_remove_buffer_predicate(app, &all_matches, buffer_has_name_with_star);
     
-    print_string_match_list_to_buffer(app, search_buffer, all_matches);
+    insertf(&out, "First attempt to write custom code ");
+    
+    end_buffer_insertion(&out);
+    
 }
 
-CUSTOM_COMMAND_SIG(kv_list_all_locations)
-CUSTOM_DOC("adapted from list_all_locations for fuzzy search, if cursor at identifier then search for that instead")
-{
-    GET_VIEW_AND_BUFFER;
-    if ( character_is_alpha(kv_get_current_char(app)) )
-    {
-        list_all_locations_of_identifier(app);
-    }
-    else
-    {
-        Scratch_Block temp(app);
-        u8 *space = push_array(temp, u8, KB(1));
-        String_Const_u8 needle_str = get_query_string(app, "List Locations For: ", space, KB(1));
-        if (!needle_str.size) return;
-        kv_list_all_locations_from_string(app, needle_str); 
-    }
-}
 // BOTTOM
 
