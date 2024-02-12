@@ -694,22 +694,50 @@ CUSTOM_DOC("Word complete with drop down menu.")
 CUSTOM_COMMAND_SIG(b50_rg)
 CUSTOM_DOC("Atempt to make rip grep work")
 {
-    // TODO(Barret5Ocal): Let's start by creating a new view and displaying it
-    
     Scratch_Block temp(app);
-    View_ID default_target_view = get_next_view_after_active(app, Access_Always);
-    Buffer_ID buffer = create_or_switch_to_buffer_and_clear_by_name(app, search_name, default_target_view);
+    Query_Bar_Group Group(app);
     
-    Buffer_Insertion out = begin_buffer_insertion_at_buffered(app, buffer, 0, temp, KB(64));
-    buffer_set_setting(app, buffer, BufferSetting_ReadOnly, true);
-    buffer_set_setting(app, buffer, BufferSetting_RecordsHistory, false);
+    Query_Bar BarString = {};
+    BarString.prompt = string_u8_litexpr("String to search: ");
+    BarString.string = SCu8(out_buffer_space, (u64)0);
+    BarString.string_capacity = sizeof(out_buffer_space);
+    if (!query_user_string(app, &BarString)) return;
+    BarString.string.size = clamp_top(BarString.string.size, sizeof(out_buffer_space) - 1);
+    out_buffer_space[BarString.string.size] = 0;
+    
+    // NOTE(Barret5Ocal): Views handle rendering and user input.
+    // this fucntion gets the pane that you are not working in 
+    View_ID View = get_next_view_after_active(app, Access_Always);
+    // NOTE(Barret5Ocal): Buffers handle memory and file data. 
+    // this function either creates for switchs to the *search* buffer(search_name)
+    String_Const_u8 BufferName = string_u8_litexpr("Barret's fun output");
+    Buffer_ID buffer = create_or_switch_to_buffer_and_clear_by_name(app, BufferName, View);
+    
+    String_Const_u8 CommandToRun = string_u8_litexpr("rg");
+    String_Const_u8 Arg  = SCu8(out_buffer_space);
+    String_Const_u8 ComandWithArg = push_stringf(temp, "%s %s", CommandToRun.str, Arg.str);
+    
+    //String_Const_u8 hot_directory = SCu8(hot_directory_space);
+    String_Const_u8 hot_directory = push_hot_directory(app, temp);
+    Buffer_Identifier BI = buffer_identifier(BufferName);
+    exec_system_command(app, View, BI, hot_directory, ComandWithArg, CLI_OverlapWithConflict|CLI_CursorAtEnd|CLI_SendEndSignal);
     
     
-    insertf(&out, "First attempt to write custom code ");
-    
-    end_buffer_insertion(&out);
     
 }
 
 // BOTTOM
 
+// Notes for later use
+
+// NOTE(Barret5Ocal): Buffer_Insertion is what allows us to write text to the buffer
+//Buffer_Insertion out = begin_buffer_insertion_at_buffered(app, buffer, 0, temp, KB(64));
+// NOTE(Barret5Ocal): we can alter the buffers settings 
+//buffer_set_setting(app, buffer, BufferSetting_ReadOnly, true);
+//buffer_set_setting(app, buffer, BufferSetting_RecordsHistory, false);
+
+// NOTE(Barret5Ocal): This writes the text to the buffer
+//insertf(&out, "First attempt to write custom code ");
+
+// NOTE(Barret5Ocal): we have to end the insertion when we are done
+//end_buffer_insertion(&out);
