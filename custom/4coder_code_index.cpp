@@ -591,6 +591,7 @@ generic_parse_scope(Application_Links *app, Code_Index_File *index, Generic_Pars
 function Code_Index_Nest*
 generic_parse_paren(Application_Links *app, Code_Index_File *index, Generic_Parse_State *state);
 
+#if 0
 function Code_Index_Nest*
 generic_parse_statement(Code_Index_File *index, Generic_Parse_State *state){
 	Token *token = token_it_read(&state->it);
@@ -647,6 +648,138 @@ generic_parse_statement(Code_Index_File *index, Generic_Parse_State *state){
 	
 	return(result);
 }
+#endif 
+
+// CUSTOM STARTS HERE 
+function b32 odin_check_semicolon(Token *token)
+{
+    switch (token->sub_kind)
+    {
+        case TokenCppKind_Identifier:
+        case TokenCppKind_context:
+        case TokenCppKind_TypeID:
+        case TokenCppKind_Break:
+        case TokenCppKind_Continue:
+        case TokenCppKind_fallthrough:
+        case TokenCppKind_Return:
+        case TokenCppKind_LiteralInteger:
+		case TokenCppKind_LiteralIntegerU:
+		case TokenCppKind_LiteralIntegerL:
+		case TokenCppKind_LiteralIntegerUL:
+		case TokenCppKind_LiteralIntegerLL:
+		case TokenCppKind_LiteralIntegerULL:
+		case TokenCppKind_LiteralIntegerHex:
+		case TokenCppKind_LiteralIntegerHexU:
+		case TokenCppKind_LiteralIntegerHexL:
+		case TokenCppKind_LiteralIntegerHexUL:
+		case TokenCppKind_LiteralIntegerHexLL:
+		case TokenCppKind_LiteralIntegerHexULL:
+		case TokenCppKind_LiteralIntegerOct:
+		case TokenCppKind_LiteralIntegerOctU:
+		case TokenCppKind_LiteralIntegerOctL:
+		case TokenCppKind_LiteralIntegerOctUL:
+		case TokenCppKind_LiteralIntegerOctLL:
+		case TokenCppKind_LiteralIntegerOctULL:
+		case TokenCppKind_LiteralFloat32:
+		case TokenCppKind_LiteralFloat64:
+		case TokenCppKind_LiteralString:
+		case TokenCppKind_LiteralStringWide:
+		case TokenCppKind_LiteralStringUTF8:
+		case TokenCppKind_LiteralStringUTF16:
+		case TokenCppKind_LiteralStringUTF32:
+		case TokenCppKind_LiteralStringRaw:
+		case TokenCppKind_LiteralStringWideRaw:
+		case TokenCppKind_LiteralStringUTF8Raw:
+		case TokenCppKind_LiteralStringUTF16Raw:
+		case TokenCppKind_LiteralStringUTF32Raw:
+		case TokenCppKind_LiteralCharacter:
+		case TokenCppKind_LiteralCharacterWide:
+		case TokenCppKind_LiteralCharacterUTF8:
+		case TokenCppKind_LiteralCharacterUTF16:
+		case TokenCppKind_LiteralCharacterUTF32:
+        case TokenCppKind_Ternary:
+        case TokenCppKind_Xor:
+        case TokenCppKind_ParenCl:
+        case TokenCppKind_BrackCl:
+        case TokenCppKind_BraceCl:
+        case TokenCppKind_Comma:
+        return true;
+        default:
+		return false;
+    }
+}
+
+function Code_Index_Nest *generic_parse_statement(Code_Index_File *index, Generic_Parse_State *state)
+{
+    Token *token = token_it_read(&state->it);
+	Code_Index_Nest *result = push_array_zero(state->arena, Code_Index_Nest, 1);
+	result->kind = CodeIndexNest_Statement;
+	result->open = Ii64(token->pos);
+	result->close = Ii64(max_i64);
+	result->file = index;
+	
+	state->in_statement = true;
+	
+    Token *prev_non_whitespace = token;
+	for (;;){
+	    token = token_it_read(&state->it);
+	    i64 start_line = get_line_number_from_pos(state->app, index->buffer, Ii64(token).min);
+    	i64 end_line = get_line_number_from_pos(state->app, index->buffer, Ii64(token).max+1);
+		b32 newline = start_line < end_line;
+		if (newline && (odin_check_semicolon(prev_non_whitespace) || prev_non_whitespace == token)) {
+            result->is_closed = true;
+			result->close = Ii64(token);
+			generic_parse_inc(state);
+			break;
+		}
+		generic_parse_skip_soft_tokens(index, state);
+		token = token_it_read(&state->it);
+        prev_non_whitespace = token;
+		if (token == 0 || state->finished){
+			break;
+		}
+		
+		if (state->in_preprocessor){
+			if (!HasFlag(token->flags, TokenBaseFlag_PreprocessorBody) ||
+				token->kind == TokenBaseKind_Preprocessor){
+				result->is_closed = true;
+				result->close = Ii64(token->pos);
+				break;
+			}
+		}
+		else{
+			if (token->kind == TokenBaseKind_Preprocessor){
+				result->is_closed = true;
+				result->close = Ii64(token->pos);
+				break;
+			}
+		}
+		
+		if (token->kind == TokenBaseKind_ScopeOpen ||
+			token->kind == TokenBaseKind_ScopeClose ||
+			token->kind == TokenBaseKind_ParentheticalOpen){
+			result->is_closed = true;
+			result->close = Ii64(token->pos);
+			break;
+		}
+		
+		if (token->kind == TokenBaseKind_StatementClose) {
+			result->is_closed = true;
+			result->close = Ii64(token);
+			generic_parse_inc(state);
+			break;
+		}
+		
+		generic_parse_inc(state);
+	}
+	
+	state->in_statement = false;
+	
+	return(result);
+}
+
+// CUSTOM ENDS HERE
+
 
 function Code_Index_Nest*
 generic_parse_preprocessor(Application_Links *app, Code_Index_File *index, Generic_Parse_State *state){
